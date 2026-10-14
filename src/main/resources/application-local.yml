@@ -1,0 +1,60 @@
+# local 프로필 — docker compose(MySQL)로 띄운 로컬 인프라에 붙는다. 값은 docker-compose.yml·docker/mysql/init 과 짝이다.
+# 실행: docker compose up -d && ./gradlew bootRun   (bootRun 은 SPRING_PROFILES_ACTIVE 가 없으면 local 로 뜬다)
+
+# 논리 키 — 운영에서는 환경변수나 aws·azure·gcp 프로필의 비밀 저장소가 채운다
+db-host: ${DB_HOST:localhost}
+db-port: ${DB_PORT:3306}
+db-reader-username: skeleton_reader
+db-reader-password: skeleton_reader
+db-writer-username: skeleton_writer
+db-writer-password: skeleton_writer
+db-admin-username: skeleton_admin
+db-admin-password: skeleton_admin
+webhook-api-key: local-webhook-api-key
+
+spring:
+  datasource:
+    # 로컬 MySQL 8 은 TLS 없이 caching_sha2_password 를 쓰므로 공개키 조회를 허용한다
+    batch:
+      read:
+        url: jdbc:mysql://${db-host}:${db-port}/skeleton_batch?allowPublicKeyRetrieval=true&useSSL=false
+      write:
+        url: jdbc:mysql://${db-host}:${db-port}/skeleton_batch?allowPublicKeyRetrieval=true&useSSL=false
+        hikari:
+          maximum-pool-size: 3  # JobRepository 트랜잭션 + MySQLMaxValueIncrementer(useNewConnection) + Quartz JobStore 최소값
+    main:
+      read:
+        url: jdbc:mysql://${db-host}:${db-port}/skeleton_main?allowPublicKeyRetrieval=true&useSSL=false
+        hikari:
+          maximum-pool-size: 1
+      write:
+        url: jdbc:mysql://${db-host}:${db-port}/skeleton_main?allowPublicKeyRetrieval=true&useSSL=false
+        hikari:
+          maximum-pool-size: 1
+    sub:
+      read:
+        url: jdbc:mysql://${db-host}:${db-port}/skeleton_sub?allowPublicKeyRetrieval=true&useSSL=false
+        hikari:
+          maximum-pool-size: 1
+      write:
+        url: jdbc:mysql://${db-host}:${db-port}/skeleton_sub?allowPublicKeyRetrieval=true&useSSL=false
+        hikari:
+          maximum-pool-size: 1
+
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    org.springframework.batch: DEBUG
+    org.quartz: INFO
+    org.hibernate.SQL: DEBUG
+
+app:
+  batch:
+    jobs:
+      sample:
+        cron: "0 */5 * * * ?"  # 로컬은 5분마다

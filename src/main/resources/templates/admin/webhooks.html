@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{admin/layout}">
+<head>
+    <title>Webhooks</title>
+</head>
+<body>
+    <span layout:fragment="page-title">
+        <i class="bi bi-link-45deg me-2"></i>Webhook Trigger History
+    </span>
+
+    <div layout:fragment="content">
+        <!-- Filters -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <form class="row g-3" id="filter-form">
+                    <div class="col-md-6">
+                        <label class="form-label">Job Name</label>
+                        <select class="form-select" id="filter-job-name">
+                            <option value="">All Jobs</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="bi bi-search me-1"></i>Search
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="reset-filter">
+                            <i class="bi bi-x-lg me-1"></i>Reset
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Webhook History Table -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Job Name</th>
+                                <th>Execution ID</th>
+                                <th>Trace ID</th>
+                                <th>Source</th>
+                                <th>Status</th>
+                                <th>Triggered At</th>
+                                <th>Completed At</th>
+                                <th>Client IP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="webhooks-table-body">
+                            <tr>
+                                <td colspan="9" class="text-center py-4 text-muted">
+                                    <i class="bi bi-hourglass-split"></i> Loading...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-white border-top-0">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted">Showing <span id="showing-count">0</span> records (last 30 days)</span>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0" id="pagination">
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <th:block layout:fragment="scripts">
+        <script>
+            let currentPage = 0;
+            const pageSize = 20;
+
+            document.addEventListener('DOMContentLoaded', function() {
+                loadJobs();
+                loadWebhooks();
+
+                document.getElementById('filter-form').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    currentPage = 0;
+                    loadWebhooks();
+                });
+
+                document.getElementById('reset-filter').addEventListener('click', function() {
+                    document.getElementById('filter-job-name').value = '';
+                    currentPage = 0;
+                    loadWebhooks();
+                });
+            });
+
+            async function loadJobs() {
+                const jobs = await AdminApi.get('/jobs');
+                const select = document.getElementById('filter-job-name');
+                jobs.forEach(job => {
+                    const option = document.createElement('option');
+                    option.value = job;
+                    option.textContent = job;
+                    select.appendChild(option);
+                });
+            }
+
+            async function loadWebhooks() {
+                const jobName = document.getElementById('filter-job-name').value;
+
+                const params = {
+                    page: currentPage,
+                    size: pageSize
+                };
+                if (jobName) params.jobName = jobName;
+
+                const webhooks = await AdminApi.get('/webhooks', params);
+                renderWebhooks(webhooks);
+            }
+
+            function renderWebhooks(webhooks) {
+                const tbody = document.getElementById('webhooks-table-body');
+
+                if (webhooks.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="9" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox"></i> No webhook triggers found
+                            </td>
+                        </tr>
+                    `;
+                    document.getElementById('showing-count').textContent = '0';
+                    return;
+                }
+
+                tbody.innerHTML = webhooks.map(webhook => `
+                    <tr>
+                        <td><code>${webhook.id}</code></td>
+                        <td><strong>${webhook.jobName}</strong></td>
+                        <td>
+                            ${webhook.jobExecutionId
+                                ? `<a href="/admin/executions/${webhook.jobExecutionId}">${webhook.jobExecutionId}</a>`
+                                : '-'
+                            }
+                        </td>
+                        <td><code class="text-truncate d-inline-block" style="max-width: 150px;" title="${webhook.traceId}">${webhook.traceId}</code></td>
+                        <td><span class="badge bg-info">${webhook.triggerSource}</span></td>
+                        <td>${getWebhookStatusBadge(webhook.status)}</td>
+                        <td>${DateUtil.format(webhook.triggeredAt)}</td>
+                        <td>${webhook.completedAt ? DateUtil.format(webhook.completedAt) : '-'}</td>
+                        <td><code>${webhook.clientIp || '-'}</code></td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('showing-count').textContent = webhooks.length;
+                renderPagination(webhooks.length);
+            }
+
+            function getWebhookStatusBadge(status) {
+                const statusMap = {
+                    'SUCCESS': 'bg-success',
+                    'PENDING': 'bg-warning',
+                    'RUNNING': 'bg-info',
+                    'FAILED': 'bg-danger',
+                    'COMPLETED': 'bg-success'
+                };
+                const badgeClass = statusMap[status] || 'bg-secondary';
+                return `<span class="badge ${badgeClass}">${status}</span>`;
+            }
+
+            function renderPagination(count) {
+                const pagination = document.getElementById('pagination');
+                pagination.innerHTML = '';
+
+                const prevLi = document.createElement('li');
+                prevLi.className = `page-item ${currentPage === 0 ? 'disabled' : ''}`;
+                prevLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage - 1})">Prev</a>`;
+                pagination.appendChild(prevLi);
+
+                const currentLi = document.createElement('li');
+                currentLi.className = 'page-item active';
+                currentLi.innerHTML = `<span class="page-link">${currentPage + 1}</span>`;
+                pagination.appendChild(currentLi);
+
+                const nextLi = document.createElement('li');
+                nextLi.className = `page-item ${count < pageSize ? 'disabled' : ''}`;
+                nextLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage + 1})">Next</a>`;
+                pagination.appendChild(nextLi);
+            }
+
+            function goToPage(page) {
+                if (page < 0) return;
+                currentPage = page;
+                loadWebhooks();
+            }
+        </script>
+    </th:block>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{admin/layout}">
+<head>
+    <title>Error Logs</title>
+</head>
+<body>
+    <span layout:fragment="page-title">
+        <i class="bi bi-exclamation-triangle me-2"></i>Error Logs
+    </span>
+
+    <div layout:fragment="content">
+        <!-- Filters -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <form class="row g-3" id="filter-form">
+                    <div class="col-md-6">
+                        <label class="form-label">Job Name</label>
+                        <select class="form-select" id="filter-job-name">
+                            <option value="">All Jobs</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="bi bi-search me-1"></i>Search
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="reset-filter">
+                            <i class="bi bi-x-lg me-1"></i>Reset
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Error Logs -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="accordion" id="error-logs-accordion">
+                    <div class="text-center py-4 text-muted" id="loading-indicator">
+                        <i class="bi bi-hourglass-split"></i> Loading...
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-white border-top-0">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted">Showing <span id="showing-count">0</span> errors (last 30 days)</span>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0" id="pagination">
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <th:block layout:fragment="scripts">
+        <script>
+            let currentPage = 0;
+            const pageSize = 20;
+
+            document.addEventListener('DOMContentLoaded', function() {
+                loadJobs();
+                loadErrors();
+
+                document.getElementById('filter-form').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    currentPage = 0;
+                    loadErrors();
+                });
+
+                document.getElementById('reset-filter').addEventListener('click', function() {
+                    document.getElementById('filter-job-name').value = '';
+                    currentPage = 0;
+                    loadErrors();
+                });
+            });
+
+            async function loadJobs() {
+                const jobs = await AdminApi.get('/jobs');
+                const select = document.getElementById('filter-job-name');
+                jobs.forEach(job => {
+                    const option = document.createElement('option');
+                    option.value = job;
+                    option.textContent = job;
+                    select.appendChild(option);
+                });
+            }
+
+            async function loadErrors() {
+                const jobName = document.getElementById('filter-job-name').value;
+
+                const params = {
+                    page: currentPage,
+                    size: pageSize
+                };
+                if (jobName) params.jobName = jobName;
+
+                const errors = await AdminApi.get('/errors', params);
+                renderErrors(errors);
+            }
+
+            function renderErrors(errors) {
+                const accordion = document.getElementById('error-logs-accordion');
+                const loadingIndicator = document.getElementById('loading-indicator');
+                loadingIndicator.style.display = 'none';
+
+                if (errors.length === 0) {
+                    accordion.innerHTML = `
+                        <div class="text-center py-4 text-muted">
+                            <i class="bi bi-check-circle text-success"></i> No errors found
+                        </div>
+                    `;
+                    document.getElementById('showing-count').textContent = '0';
+                    return;
+                }
+
+                accordion.innerHTML = errors.map((error, index) => `
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#error-${error.id}">
+                                <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                                    <span>
+                                        <span class="badge bg-danger me-2">${error.errorType}</span>
+                                        <strong>${error.jobName}</strong>
+                                        ${error.stepName ? `<span class="text-muted"> / ${error.stepName}</span>` : ''}
+                                    </span>
+                                    <small class="text-muted">${DateUtil.format(error.occurredAt)}</small>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="error-${error.id}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}"
+                             data-bs-parent="#error-logs-accordion">
+                            <div class="accordion-body">
+                                <div class="mb-3">
+                                    <strong>Error Message:</strong>
+                                    <p class="mb-0 text-danger">${error.errorMessage}</p>
+                                </div>
+                                ${error.errorCode ? `
+                                <div class="mb-3">
+                                    <strong>Error Code:</strong> <code>${error.errorCode}</code>
+                                </div>
+                                ` : ''}
+                                <div class="mb-3">
+                                    <strong>Job Execution ID:</strong>
+                                    <a href="/admin/executions/${error.jobExecutionId}">${error.jobExecutionId}</a>
+                                </div>
+                                ${error.stackTrace ? `
+                                <div>
+                                    <strong>Stack Trace:</strong>
+                                    <pre class="bg-dark text-light p-3 rounded mt-2" style="max-height: 300px; overflow-y: auto; font-size: 0.75rem;">${escapeHtml(error.stackTrace)}</pre>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+
+                document.getElementById('showing-count').textContent = errors.length;
+                renderPagination(errors.length);
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            function renderPagination(count) {
+                const pagination = document.getElementById('pagination');
+                pagination.innerHTML = '';
+
+                const prevLi = document.createElement('li');
+                prevLi.className = `page-item ${currentPage === 0 ? 'disabled' : ''}`;
+                prevLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage - 1})">Prev</a>`;
+                pagination.appendChild(prevLi);
+
+                const currentLi = document.createElement('li');
+                currentLi.className = 'page-item active';
+                currentLi.innerHTML = `<span class="page-link">${currentPage + 1}</span>`;
+                pagination.appendChild(currentLi);
+
+                const nextLi = document.createElement('li');
+                nextLi.className = `page-item ${count < pageSize ? 'disabled' : ''}`;
+                nextLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage + 1})">Next</a>`;
+                pagination.appendChild(nextLi);
+            }
+
+            function goToPage(page) {
+                if (page < 0) return;
+                currentPage = page;
+                loadErrors();
+            }
+        </script>
+    </th:block>
+</body>
+</html>

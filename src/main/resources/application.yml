@@ -1,0 +1,209 @@
+spring:
+  application:
+    name: batch-skeleton
+
+  # 스키마 3개 — batch(메타·Quartz, @Primary, Flyway) · main · sub(업무). 호스트·계정은 논리 키로 받는다 — README 「설정과 비밀값」.
+  # 풀 크기는 환경변수로 덮는다: SPRING_DATASOURCE_BATCH_WRITE_HIKARI_MAXIMUMPOOLSIZE=10
+  # batch write 풀은 최소 3 — JobRepository 트랜잭션 + MySQLMaxValueIncrementer(useNewConnection) + Quartz JobStore. 1 이면 Job 트리거가 풀 고갈로 죽는다
+  datasource:
+    batch:
+      read:
+        url: jdbc:mysql://${db-read-host:${db-host}}:${db-port:3306}/skeleton_batch
+        username: ${db-reader-username}
+        password: ${db-reader-password}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        type: com.zaxxer.hikari.HikariDataSource
+        hikari:
+          poolName: batchSkeletonBatchReadPool
+          auto-commit: false
+          max-lifetime: 30000
+          maximum-pool-size: 2
+      write:
+        url: jdbc:mysql://${db-host}:${db-port:3306}/skeleton_batch
+        username: ${db-writer-username}
+        password: ${db-writer-password}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        type: com.zaxxer.hikari.HikariDataSource
+        hikari:
+          poolName: batchSkeletonBatchWritePool
+          auto-commit: false
+          max-lifetime: 30000
+          maximum-pool-size: 5
+    main:
+      read:
+        url: jdbc:mysql://${db-read-host:${db-host}}:${db-port:3306}/skeleton_main
+        username: ${db-reader-username}
+        password: ${db-reader-password}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        type: com.zaxxer.hikari.HikariDataSource
+        hikari:
+          poolName: batchSkeletonMainReadPool
+          auto-commit: false
+          max-lifetime: 30000
+          maximum-pool-size: 5
+      write:
+        url: jdbc:mysql://${db-host}:${db-port:3306}/skeleton_main
+        username: ${db-writer-username}
+        password: ${db-writer-password}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        type: com.zaxxer.hikari.HikariDataSource
+        hikari:
+          poolName: batchSkeletonMainWritePool
+          auto-commit: false
+          max-lifetime: 30000
+          maximum-pool-size: 5
+    sub:
+      read:
+        url: jdbc:mysql://${db-read-host:${db-host}}:${db-port:3306}/skeleton_sub
+        username: ${db-reader-username}
+        password: ${db-reader-password}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        type: com.zaxxer.hikari.HikariDataSource
+        hikari:
+          poolName: batchSkeletonSubReadPool
+          auto-commit: false
+          max-lifetime: 30000
+          maximum-pool-size: 5
+      write:
+        url: jdbc:mysql://${db-host}:${db-port:3306}/skeleton_sub
+        username: ${db-writer-username}
+        password: ${db-writer-password}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        type: com.zaxxer.hikari.HikariDataSource
+        hikari:
+          poolName: batchSkeletonSubWritePool
+          auto-commit: false
+          max-lifetime: 30000
+          maximum-pool-size: 5
+
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
+
+  # Thymeleaf 설정
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+
+  # Flyway — skeleton_batch(메타·Quartz·커스텀 테이블)만 관리한다(MysqlFlywayConfiguration). 업무 스키마는 db/manual 수동 DDL
+  flyway:
+    enabled: true
+
+  # 비밀값 출처 — 클라우드 연동은 기본으로 꺼 두고 aws·azure·gcp 프로필이 자기 것만 켠다
+  cloud:
+    aws:
+      secretsmanager:
+        enabled: false
+    azure:
+      keyvault:
+        secret:
+          property-source-enabled: false
+    gcp:
+      core:
+        enabled: false
+      secretmanager:
+        enabled: false
+
+  # 공통 배치 설정
+  batch:
+    jdbc:
+      initialize-schema: never
+    job:
+      enabled: false  # CommandLineRunner로 자동 실행 방지
+
+  # Quartz 공통 설정
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    properties:
+      org:
+        quartz:
+          scheduler:
+            instanceName: BatchSkeletonScheduler
+            instanceId: AUTO
+          jobStore:
+            # Spring의 LocalDataSourceJobStore 사용 (Spring DataSource 통합)
+            class: org.springframework.scheduling.quartz.LocalDataSourceJobStore
+            driverDelegateClass: org.quartz.impl.jdbcjobstore.StdJDBCDelegate
+            tablePrefix: QRTZ_
+            isClustered: true
+            clusterCheckinInterval: 10000
+            useProperties: false
+          threadPool:
+            class: org.quartz.simpl.SimpleThreadPool
+            threadCount: 10
+            threadPriority: 5
+
+# Webhook 공통 설정
+webhook:
+  enabled: true
+  security:
+    api-key-header: X-API-Key
+    # 각 키에 allowed-jobs 를 반드시 적는다 — 비우면 그 키로는 아무 Job 도 트리거되지 않는다(fail-closed).
+    # 키 값은 논리 키로만 받는다. 호출 시스템이 여럿이면 항목을 늘리고 키도 따로 둔다.
+    api-keys:
+      - name: default
+        key: ${webhook-api-key}
+        allowed-jobs:
+          - sampleJob
+
+# Job 트리거 파라미터 화이트리스트 (프로파일 공통)
+#
+# Job 이 어떤 파라미터를 받는지는 Job 의 성질이지 호출자의 권한이 아니므로 여기 둔다.
+# traceId·timestamp 는 시스템이 주입하므로 어떤 목록에도 넣지 않는다.
+batch-skeleton:
+  job-trigger:
+    parameters:
+      sampleJob: []
+
+# 서버 설정
+server:
+  port: 8080
+
+# OpenAPI 설정
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  # Flyway 전용 DDL 계정 — 런타임 풀(reader·writer)과 분리한다
+  flyway:
+    mysql:
+      username: ${db-admin-username}
+      password: ${db-admin-password}
+  batch:
+    jobs:
+      sample:
+        # Quartz cron (초 분 시 일 월 요일). enabled=false 면 스케줄만 끄고 웹훅 수동 실행은 그대로다
+        cron: "0 0 2 * * ?"
+        enabled: true
+  audit:
+    # X-User-Id 헤더를 감사 주체로 신뢰할지. 기본값 false.
+    # 헤더는 외부 입력이라 그대로 신뢰하면 호출자가 다른 사용자의 ID 로
+    # 감사 기록을 위조할 수 있다. 게이트웨이·프록시가 인증 결과로 이 헤더를
+    # 덮어쓰고 외부에서 들어온 같은 이름의 헤더를 제거하는 배치에서만 켠다.
+    trust-user-header: false
+  client:
+    properties:
+      http-client:
+        connection-timeout: 5000
+      web-client:
+        memory-size: 2097152
+      connection:
+        max-connections: 30
+        max-idle-time: 5
+        max-life-time: 5
+        pending-acquire-timeout: 5
+        pending-acquire-max-count: 60
+        evict-in-background: 5
+    destinations:
+      external:
+        url: http://localhost:8081

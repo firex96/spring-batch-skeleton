@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{admin/layout}">
+<head>
+    <title>Execution Detail</title>
+</head>
+<body>
+    <span layout:fragment="page-title">
+        <i class="bi bi-file-text me-2"></i>Execution Detail
+    </span>
+
+    <div layout:fragment="content">
+        <!-- Back Button -->
+        <div class="mb-3">
+            <a th:href="@{/admin/executions}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Executions
+            </a>
+        </div>
+
+        <!-- Execution Info Card -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-info-circle me-2"></i>Job Execution #<span th:text="${executionId}" id="execution-id"></span>
+                    </h5>
+                    <span id="execution-status"></span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tbody>
+                                <tr>
+                                    <th class="text-muted w-25">Job Name</th>
+                                    <td><strong id="job-name">-</strong></td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Trace ID</th>
+                                    <td><code id="trace-id">-</code></td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Start Time</th>
+                                    <td id="start-time">-</td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">End Time</th>
+                                    <td id="end-time">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tbody>
+                                <tr>
+                                    <th class="text-muted w-25">Duration</th>
+                                    <td id="duration">-</td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Exit Code</th>
+                                    <td><code id="exit-code">-</code></td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Exit Description</th>
+                                    <td id="exit-description">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Parameters -->
+                <div class="mt-4">
+                    <h6><i class="bi bi-sliders me-2"></i>Parameters</h6>
+                    <div id="parameters-container" class="bg-light rounded p-3">
+                        <code class="d-block" id="parameters">-</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step Executions -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-ol me-2"></i>Step Executions
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Step ID</th>
+                                <th>Step Name</th>
+                                <th>Status</th>
+                                <th>Read</th>
+                                <th>Write</th>
+                                <th>Skip</th>
+                                <th>Commit</th>
+                                <th>Rollback</th>
+                                <th>Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody id="steps-table-body">
+                            <tr>
+                                <td colspan="9" class="text-center py-4 text-muted">
+                                    <i class="bi bi-hourglass-split"></i> Loading...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <th:block layout:fragment="scripts">
+        <script th:inline="javascript">
+            const executionId = /*[[${executionId}]]*/ 0;
+
+            document.addEventListener('DOMContentLoaded', function() {
+                loadExecution();
+            });
+
+            async function loadExecution() {
+                try {
+                    const exec = await AdminApi.get(`/executions/${executionId}`);
+                    renderExecution(exec);
+                } catch (error) {
+                    document.getElementById('execution-status').innerHTML = StatusBadge.render('NOT_FOUND');
+                }
+            }
+
+            function renderExecution(exec) {
+                document.getElementById('job-name').textContent = exec.jobName;
+                document.getElementById('execution-status').innerHTML = StatusBadge.render(exec.status);
+                document.getElementById('trace-id').textContent = exec.traceId || '-';
+                document.getElementById('start-time').textContent = DateUtil.format(exec.startTime);
+                document.getElementById('end-time').textContent = exec.endTime ? DateUtil.format(exec.endTime) : '-';
+                document.getElementById('duration').textContent = DateUtil.formatDuration(exec.startTime, exec.endTime);
+                document.getElementById('exit-code').textContent = exec.exitCode;
+                document.getElementById('exit-description').textContent = exec.exitDescription || '-';
+
+                // Parameters
+                if (exec.parameters && Object.keys(exec.parameters).length > 0) {
+                    document.getElementById('parameters').textContent = JSON.stringify(exec.parameters, null, 2);
+                } else {
+                    document.getElementById('parameters').textContent = 'No parameters';
+                }
+
+                // Steps
+                renderSteps(exec.stepExecutions || []);
+            }
+
+            function renderSteps(steps) {
+                const tbody = document.getElementById('steps-table-body');
+
+                if (steps.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="9" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox"></i> No steps found
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = steps.map(step => `
+                    <tr>
+                        <td><code>${step.stepExecutionId}</code></td>
+                        <td><strong>${step.stepName}</strong></td>
+                        <td>${StatusBadge.render(step.status)}</td>
+                        <td>${step.readCount.toLocaleString()}</td>
+                        <td>${step.writeCount.toLocaleString()}</td>
+                        <td class="${step.skipCount > 0 ? 'text-warning' : ''}">${step.skipCount.toLocaleString()}</td>
+                        <td>${step.commitCount.toLocaleString()}</td>
+                        <td class="${step.rollbackCount > 0 ? 'text-danger' : ''}">${step.rollbackCount.toLocaleString()}</td>
+                        <td>${DateUtil.formatDuration(step.startTime, step.endTime)}</td>
+                    </tr>
+                `).join('');
+            }
+        </script>
+    </th:block>
+</body>
+</html>

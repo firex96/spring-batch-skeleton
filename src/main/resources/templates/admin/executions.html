@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{admin/layout}">
+<head>
+    <title>Executions</title>
+</head>
+<body>
+    <span layout:fragment="page-title">
+        <i class="bi bi-list-task me-2"></i>Job Executions
+    </span>
+
+    <div layout:fragment="content">
+        <!-- Filters -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <form class="row g-3" id="filter-form">
+                    <div class="col-md-4">
+                        <label class="form-label">Job Name</label>
+                        <select class="form-select" id="filter-job-name">
+                            <option value="">All Jobs</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" id="filter-status">
+                            <option value="">All Status</option>
+                            <option value="COMPLETED">COMPLETED</option>
+                            <option value="STARTED">STARTED</option>
+                            <option value="STARTING">STARTING</option>
+                            <option value="FAILED">FAILED</option>
+                            <option value="STOPPED">STOPPED</option>
+                            <option value="ABANDONED">ABANDONED</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="bi bi-search me-1"></i>Search
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="reset-filter">
+                            <i class="bi bi-x-lg me-1"></i>Reset
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Executions Table -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Job Name</th>
+                                <th>Status</th>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                                <th>Duration</th>
+                                <th>Exit Code</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="executions-table-body">
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-hourglass-split"></i> Loading...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-white border-top-0">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted">Showing <span id="showing-count">0</span> executions</span>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0" id="pagination">
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <th:block layout:fragment="scripts">
+        <script>
+            let currentPage = 0;
+            const pageSize = 20;
+
+            document.addEventListener('DOMContentLoaded', function() {
+                loadJobs();
+                loadExecutions();
+
+                document.getElementById('filter-form').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    currentPage = 0;
+                    loadExecutions();
+                });
+
+                document.getElementById('reset-filter').addEventListener('click', function() {
+                    document.getElementById('filter-job-name').value = '';
+                    document.getElementById('filter-status').value = '';
+                    currentPage = 0;
+                    loadExecutions();
+                });
+            });
+
+            async function loadJobs() {
+                const jobs = await AdminApi.get('/jobs');
+                const select = document.getElementById('filter-job-name');
+                jobs.forEach(job => {
+                    const option = document.createElement('option');
+                    option.value = job;
+                    option.textContent = job;
+                    select.appendChild(option);
+                });
+            }
+
+            async function loadExecutions() {
+                const jobName = document.getElementById('filter-job-name').value;
+                const status = document.getElementById('filter-status').value;
+
+                const params = {
+                    page: currentPage,
+                    size: pageSize
+                };
+                if (jobName) params.jobName = jobName;
+                if (status) params.status = status;
+
+                const executions = await AdminApi.get('/executions', params);
+                renderExecutions(executions);
+            }
+
+            function renderExecutions(executions) {
+                const tbody = document.getElementById('executions-table-body');
+
+                if (executions.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox"></i> No executions found
+                            </td>
+                        </tr>
+                    `;
+                    document.getElementById('showing-count').textContent = '0';
+                    return;
+                }
+
+                tbody.innerHTML = executions.map(exec => `
+                    <tr>
+                        <td><code>${exec.jobExecutionId}</code></td>
+                        <td><strong>${exec.jobName}</strong></td>
+                        <td>${StatusBadge.render(exec.status)}</td>
+                        <td>${DateUtil.format(exec.startTime)}</td>
+                        <td>${exec.endTime ? DateUtil.format(exec.endTime) : '-'}</td>
+                        <td>${DateUtil.formatDuration(exec.startTime, exec.endTime)}</td>
+                        <td><code>${exec.exitCode}</code></td>
+                        <td>
+                            <a href="/admin/executions/${exec.jobExecutionId}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('showing-count').textContent = executions.length;
+                renderPagination(executions.length);
+            }
+
+            function renderPagination(count) {
+                const pagination = document.getElementById('pagination');
+                pagination.innerHTML = '';
+
+                // Previous button
+                const prevLi = document.createElement('li');
+                prevLi.className = `page-item ${currentPage === 0 ? 'disabled' : ''}`;
+                prevLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage - 1})">Prev</a>`;
+                pagination.appendChild(prevLi);
+
+                // Current page indicator
+                const currentLi = document.createElement('li');
+                currentLi.className = 'page-item active';
+                currentLi.innerHTML = `<span class="page-link">${currentPage + 1}</span>`;
+                pagination.appendChild(currentLi);
+
+                // Next button
+                const nextLi = document.createElement('li');
+                nextLi.className = `page-item ${count < pageSize ? 'disabled' : ''}`;
+                nextLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage + 1})">Next</a>`;
+                pagination.appendChild(nextLi);
+            }
+
+            function goToPage(page) {
+                if (page < 0) return;
+                currentPage = page;
+                loadExecutions();
+            }
+        </script>
+    </th:block>
+</body>
+</html>

@@ -1,0 +1,189 @@
+# test 프로필 — 통합 테스트가 @ActiveProfiles("test") 로 켠다(integrationTest 태스크의 기본 프로필이기도 하다).
+# 데이터소스 URL·계정은 TestcontainersConfiguration.Initializer 가 컨테이너 값으로 덮는다. 아래 논리 키는
+# 기본 application.yml 의 나머지 플레이스홀더를 해석시키기 위한 테스트 고정값이다(설정값·비밀값 규약 예외 ②).
+db-host: localhost
+db-reader-username: test
+db-reader-password: test
+db-writer-username: test
+db-writer-password: test
+db-admin-username: test-admin
+db-admin-password: test-admin
+webhook-api-key: test-webhook-key
+
+spring:
+  main:
+    allow-bean-definition-overriding: true
+
+  datasource:
+    # Batch DataSource (Primary) - Testcontainers에서 override됨
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    jdbc-url: jdbc:mysql://localhost:3306/test_batch
+    url: jdbc:mysql://localhost:3306/test_batch
+    username: test
+    password: test
+    hikari:
+      maximum-pool-size: 5
+
+    # Batch Meta DataSource
+    batch:
+      write:
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/test_batch
+        url: jdbc:mysql://localhost:3306/test_batch
+        username: test
+        password: test
+        hikari:
+          maximum-pool-size: 5
+      read:
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/test_batch
+        url: jdbc:mysql://localhost:3306/test_batch
+        username: test
+        password: test
+        hikari:
+          maximum-pool-size: 5
+
+    # main DataSource
+    main:
+      write:
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/test_batch
+        url: jdbc:mysql://localhost:3306/test_batch
+        username: test
+        password: test
+        hikari:
+          maximum-pool-size: 5
+      read:
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/test_batch
+        url: jdbc:mysql://localhost:3306/test_batch
+        username: test
+        password: test
+        hikari:
+          maximum-pool-size: 5
+
+    # sub DataSource
+    sub:
+      write:
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/test_batch
+        url: jdbc:mysql://localhost:3306/test_batch
+        username: test
+        password: test
+        hikari:
+          maximum-pool-size: 5
+      read:
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/test_batch
+        url: jdbc:mysql://localhost:3306/test_batch
+        username: test
+        password: test
+        hikari:
+          maximum-pool-size: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false
+
+  quartz:
+    auto-startup: false
+    job-store-type: memory
+    jdbc:
+      initialize-schema: never
+    properties:
+      org:
+        quartz:
+          scheduler:
+            instanceName: TestScheduler
+            instanceId: AUTO
+          jobStore:
+            class: org.quartz.simpl.RAMJobStore
+          threadPool:
+            class: org.quartz.simpl.SimpleThreadPool
+            threadCount: 1
+            threadPriority: 5
+
+logging:
+  level:
+    org.springframework.batch: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql: TRACE
+
+# Client configuration
+client:
+  destinations:
+    sample:
+      base-url: http://localhost:8080
+      connect-timeout: 5000
+      read-timeout: 30000
+      write-timeout: 30000
+
+# External API client configuration
+app:
+  # 테스트 고정값 — 기본 yml 의 논리 키 참조를 덮는다(실 Flyway 계정은 Initializer 가 컨테이너 계정으로 다시 덮는다).
+  flyway:
+    mysql:
+      username: test-user-skeleton-admin
+      password: test-password-skeleton-admin
+  client:
+    destinations:
+      external:
+        url: http://localhost:8080
+    properties:
+      http-client:
+        connection-timeout: 5000
+        read-timeout: 30000
+        write-timeout: 30000
+      web-client:
+        memory-size: 10485760
+      connection:
+        max-connections: 100
+        max-idle-time: 60000
+        max-life-time: 120000
+        pending-acquire-timeout: 60000
+        pending-acquire-max-count: 1000
+        evict-in-background: 120000
+
+# ── Job 트리거 인가 테스트용 설정 (실 시크릿 아님)
+#
+# 인가를 적용하면 키가 없는 컨텍스트에서는 모든 활성 경로가 401 이 되어
+# A-3·A-4·A-6·A-7 분기를 만들 수 없다. 그래서 테스트 전용 키를 여기 둔다.
+webhook:
+  enabled: true
+  security:
+    api-key-header: X-API-Key
+    api-keys:
+      # A-4·A-6·A-10 용 — sampleJob 허용
+      - name: test-full
+        key: test-key-full
+        allowed-jobs:
+          - sampleJob
+      # A-3 용 — 아무 Job 도 허용하지 않는다(fail-closed 기본값 확인)
+      - name: test-none
+        key: test-key-none
+        allowed-jobs: []
+      # A-7 용 — 같은 name 이 둘, 스코프가 다르다.
+      # 좁은 키로 인증한 뒤 넓은 스코프를 얻을 수 있으면 안 된다.
+      - name: test-dup
+        key: test-key-dup-narrow
+        allowed-jobs: []
+      - name: test-dup
+        key: test-key-dup-wide
+        allowed-jobs:
+          - sampleJob
+
+batch-skeleton:
+  job-trigger:
+    parameters:
+      sampleJob: []
