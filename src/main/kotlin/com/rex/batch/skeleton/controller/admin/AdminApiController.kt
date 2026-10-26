@@ -65,12 +65,7 @@ class AdminApiController(
         @PathVariable id: Long,
     ): ResponseEntity<JobExecutionModel> {
         log.debug("Job execution detail requested - id={}", id)
-        val execution = adminMappingService.getJobExecution(id)
-        return if (execution != null) {
-            ResponseEntity.ok(execution)
-        } else {
-            ResponseEntity.notFound().build()
-        }
+        return ResponseEntity.ok(adminMappingService.getJobExecution(id))
     }
 
     @GetMapping("/errors")

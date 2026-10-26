@@ -11,6 +11,7 @@ import com.rex.batch.skeleton.persistence.jpa.service.batch.JobErrorLogJpaEntity
 import com.rex.batch.skeleton.persistence.jpa.service.batch.JobExecutionSummaryJpaEntityService
 import com.rex.batch.skeleton.persistence.jpa.service.batch.JobScheduleConfigJpaEntityService
 import com.rex.batch.skeleton.persistence.jpa.service.batch.WebhookTriggerHistoryJpaEntityService
+import com.rex.batch.skeleton.util.requireJobExecution
 import org.springframework.batch.core.BatchStatus
 import org.springframework.batch.core.repository.explore.JobExplorer
 import org.springframework.stereotype.Service
@@ -144,8 +145,8 @@ class JobAdminBizService(
     /**
      * Job 실행 상세 조회
      */
-    fun getJobExecution(jobExecutionId: Long): JobExecutionDto? {
-        val execution = jobExplorer.getJobExecution(jobExecutionId) ?: return null
+    fun getJobExecution(jobExecutionId: Long): JobExecutionDto {
+        val execution = jobExplorer.requireJobExecution(jobExecutionId)
         return toJobExecutionDto(execution)
     }
 

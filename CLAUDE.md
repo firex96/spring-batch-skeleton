@@ -209,9 +209,11 @@ This is a Spring Batch skeleton project with a layered architecture designed for
 
 5. **Exception Handling Pattern**
    - **업무 예외는 `CodedException` 을 상속하고, HTTP 상태와 오류 코드는 `ErrorCode` 하나가 정한다.** 새 오류는 `ErrorCode` 에 항목을 추가하고 `throw CodedException(ErrorCode.X)` 로 던진다. 응답 `details` 에는 요청에서 온 값(위조 가능)을 싣지 않는다
-   - `GlobalExceptionHandler` 는 `CodedException` 하나로 받고 상태는 `errorCode.status` 로만 정한다. 전용 핸들러는 응답에 예외 메시지를 내보내면 안 되는 `ForbiddenException`(어떤 Job 이 있는지 숨김)·`InvalidJobParameterException`(거부 키 이름만 노출) 둘뿐이다
+   - `GlobalExceptionHandler` 는 `CodedException` 하나로 받고 상태는 `errorCode.status` 로만 정한다. 전용 핸들러는 응답에 Job 이름이 든 예외 메시지 대신 코드 문구를 싣는 `InvalidJobParameterException`(거부 키 이름만 노출) 하나뿐이다. `ForbiddenException` 은 메시지 인자를 받지 않아 타입이 노출을 막는다(어떤 Job 이 있는지 숨김 — 거부 사유는 `JobTriggerAuthorizer` 가 로그로 남긴다)
+   - **응답 문구는 사용자 문장이다** — `message` 는 업무 예외 4xx 면 예외 메시지, 5xx 업무 예외·캐치올이면 `errorCode.message`, Spring Batch 예외면 고정 문구다. `details` 에는 예외가 실은 값(경로 변수·거부 키 이름)만 싣고 Spring Batch·캐치올 예외의 메시지(Job 파라미터 값이 들어간다)는 싣지 않는다. 로그는 `respond` 한 곳 — 4xx `warn`, 5xx `error`(스택)
+   - 실행 조회는 `getJobExecution` 을 직접 부르지 않고 `util/JobExplorerExtensions.kt` 의 `requireJobExecution` 을 쓴다 — Spring Batch 6 의 `JobExplorer.getJobExecution` 은 없는 id 에 `EmptyResultDataAccessException` 을 던져 500 이 되므로, 그 예외와 `null` 을 `JobExecutionNotFoundException`(404 `JOB_002`)으로 바꾼다. 웹훅·관리자 API 모두 같다
    - 예외: `InvalidApiKeyException`(401 AUTH_001) · `ForbiddenException`(403 AUTH_002) · `InvalidJobParameterException`(400 COMMON_001) · `JobNotFoundException`(404 JOB_001) · `JobExecutionNotFoundException`(404 JOB_002) · `ItemNotFoundException`(404 COMMON_002) · `BatchProcessException`(500 BATCH_001, Step 안에서 던진다)
-   - 검출: `ErrorCodeContractTest`(모든 코드의 status 400~599·코드 유일) · `GlobalExceptionHandlerTest`(unit, 단일 핸들러와 전용 핸들러 선택)
+   - 검출: `ErrorCodeContractTest`(모든 코드의 status 400~599·코드 유일) · `GlobalExceptionHandlerTest`(unit, 단일 핸들러·전용 핸들러 선택과 응답 문구 비노출) · `JobExplorerExtensionsTest` · `JobExecutionNotFoundIntegrationTest`(웹훅·관리자 404 `JOB_002`)
    - Listener에서 에러 로깅 자동 처리
 
 6. **String Enum Pattern**

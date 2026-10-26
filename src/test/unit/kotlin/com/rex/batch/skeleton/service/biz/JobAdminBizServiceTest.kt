@@ -1,10 +1,12 @@
 package com.rex.batch.skeleton.service.biz
 
 import com.rex.batch.skeleton.dto.batch.JobScheduleConfigDto
+import com.rex.batch.skeleton.exception.JobExecutionNotFoundException
 import com.rex.batch.skeleton.persistence.jpa.service.batch.JobErrorLogJpaEntityService
 import com.rex.batch.skeleton.persistence.jpa.service.batch.JobExecutionSummaryJpaEntityService
 import com.rex.batch.skeleton.persistence.jpa.service.batch.JobScheduleConfigJpaEntityService
 import com.rex.batch.skeleton.persistence.jpa.service.batch.WebhookTriggerHistoryJpaEntityService
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -14,11 +16,12 @@ import org.springframework.batch.core.job.JobExecution
 import org.springframework.batch.core.job.JobInstance
 import org.springframework.batch.core.job.parameters.JobParameters
 import org.springframework.batch.core.repository.explore.JobExplorer
+import org.springframework.dao.EmptyResultDataAccessException
 import java.time.LocalDateTime
 
 /**
  * `JobAdminBizService` 의 집계·필터 — `AdminMappingService` 에서 이관한 조회 로직이 그대로 동작하는지.
- * JA-1 대시보드 집계(오늘 실행·완료·실패·실행 중·스케줄 수) · JA-2 실행 목록의 jobName·status 필터와 페이지 · JA-3 없는 실행 id → null.
+ * JA-1 대시보드 집계(오늘 실행·완료·실패·실행 중·스케줄 수) · JA-2 실행 목록의 jobName·status 필터와 페이지 · JA-3 없는 실행 id → `JobExecutionNotFoundException`.
  */
 class JobAdminBizServiceTest : BehaviorSpec({
     val jobExplorer = mockk<JobExplorer>()
@@ -88,10 +91,11 @@ class JobAdminBizServiceTest : BehaviorSpec({
     }
 
     Given("없는 실행 id") {
-        every { jobExplorer.getJobExecution(999L) } returns null
+        // Spring Batch 6 의 JobExplorer 는 없는 id 에 null 대신 EmptyResultDataAccessException 을 던진다
+        every { jobExplorer.getJobExecution(999L) } throws EmptyResultDataAccessException(1)
 
-        Then("JA-3 null 을 돌려준다(컨트롤러가 404 로 바꾼다)") {
-            service.getJobExecution(999L) shouldBe null
+        Then("JA-3 JobExecutionNotFoundException 을 던진다(404 JOB_002)") {
+            shouldThrow<JobExecutionNotFoundException> { service.getJobExecution(999L) }
         }
     }
 })

@@ -35,8 +35,7 @@ class AdminMappingService(
         status: String? = null,
     ): List<JobExecutionModel> = mapper.toJobExecutionModelList(jobAdminBizService.getJobExecutions(page, size, jobName, status))
 
-    fun getJobExecution(jobExecutionId: Long): JobExecutionModel? =
-        jobAdminBizService.getJobExecution(jobExecutionId)?.let { mapper.toJobExecutionModel(it) }
+    fun getJobExecution(jobExecutionId: Long): JobExecutionModel = mapper.toJobExecutionModel(jobAdminBizService.getJobExecution(jobExecutionId))
 
     fun getErrorLogs(
         page: Int = 0,

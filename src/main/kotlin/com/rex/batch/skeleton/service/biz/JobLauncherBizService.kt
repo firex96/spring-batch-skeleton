@@ -7,6 +7,7 @@ import com.rex.batch.skeleton.exception.JobExecutionNotFoundException
 import com.rex.batch.skeleton.exception.JobNotFoundException
 import com.rex.batch.skeleton.filter.TraceIdSanitizer
 import com.rex.batch.skeleton.util.logger
+import com.rex.batch.skeleton.util.requireJobExecution
 import org.slf4j.MDC
 import org.springframework.batch.core.job.Job
 import org.springframework.batch.core.job.JobExecution
@@ -85,9 +86,7 @@ class JobLauncherBizService(
      * @return Job 실행 정보 DTO
      */
     fun getJobExecution(jobExecutionId: Long): JobExecutionDto {
-        val jobExecution =
-            jobExplorer.getJobExecution(jobExecutionId)
-                ?: throw JobExecutionNotFoundException(jobExecutionId)
+        val jobExecution = jobExplorer.requireJobExecution(jobExecutionId)
 
         return toDto(jobExecution)
     }

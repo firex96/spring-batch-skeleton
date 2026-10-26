@@ -7,6 +7,8 @@ import com.rex.batch.skeleton.exception.InvalidJobParameterException
 import com.rex.batch.skeleton.exception.ItemNotFoundException
 import com.rex.batch.skeleton.exception.JobExecutionNotFoundException
 import com.rex.batch.skeleton.exception.JobNotFoundException
+import org.springframework.batch.core.launch.JobInstanceAlreadyCompleteException
+import org.springframework.batch.core.launch.JobRestartException
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
@@ -31,8 +33,17 @@ internal class ExceptionProbeController {
     fun invalidApiKey(): String = throw InvalidApiKeyException("Invalid API Key")
 
     @GetMapping("/forbidden")
-    fun forbidden(): String = throw ForbiddenException("key-1 tried secretJob")
+    fun forbidden(): String = throw ForbiddenException()
 
     @GetMapping("/invalid-job-parameter")
     fun invalidJobParameter(): String = throw InvalidJobParameterException("sampleJob", setOf("b", "a"))
+
+    @GetMapping("/job-instance-complete")
+    fun jobInstanceComplete(): String = throw JobInstanceAlreadyCompleteException("identifying parameters={secret=1}")
+
+    @GetMapping("/job-restart")
+    fun jobRestart(): String = throw JobRestartException("identifying parameters={secret=1}")
+
+    @GetMapping("/unexpected")
+    fun unexpected(): String = throw IllegalStateException("internal secret detail")
 }
