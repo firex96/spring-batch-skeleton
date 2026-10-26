@@ -12,6 +12,4 @@ class InvalidJobParameterException(
     val jobName: String,
     val rejectedKeys: Set<String>,
     message: String = "Parameters not allowed for job $jobName: ${rejectedKeys.sorted()}",
-) : RuntimeException(message) {
-    val errorCode: ErrorCode = ErrorCode.INVALID_REQUEST
-}
+) : CodedException(ErrorCode.INVALID_REQUEST, message, "rejectedKeys=${rejectedKeys.sorted()}")

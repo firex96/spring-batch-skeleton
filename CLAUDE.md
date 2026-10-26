@@ -208,8 +208,10 @@ This is a Spring Batch skeleton project with a layered architecture designed for
    - `@Async` 는 같은 프록시 규칙 — 같은 클래스 안 호출은 동기. 이 레포에는 `@Async` 가 없다(쓰게 되면 별도 빈으로, 검출 테스트는 public·internal 의 `AsyncSelfInvocationConventionTest` 를 복제)
 
 5. **Exception Handling Pattern**
-   - `BatchProcessException`: 배치 처리 중 오류
-   - `ItemNotFoundException`: 아이템 없음
+   - **업무 예외는 `CodedException` 을 상속하고, HTTP 상태와 오류 코드는 `ErrorCode` 하나가 정한다.** 새 오류는 `ErrorCode` 에 항목을 추가하고 `throw CodedException(ErrorCode.X)` 로 던진다. 응답 `details` 에는 요청에서 온 값(위조 가능)을 싣지 않는다
+   - `GlobalExceptionHandler` 는 `CodedException` 하나로 받고 상태는 `errorCode.status` 로만 정한다. 전용 핸들러는 응답에 예외 메시지를 내보내면 안 되는 `ForbiddenException`(어떤 Job 이 있는지 숨김)·`InvalidJobParameterException`(거부 키 이름만 노출) 둘뿐이다
+   - 예외: `InvalidApiKeyException`(401 AUTH_001) · `ForbiddenException`(403 AUTH_002) · `InvalidJobParameterException`(400 COMMON_001) · `JobNotFoundException`(404 JOB_001) · `JobExecutionNotFoundException`(404 JOB_002) · `ItemNotFoundException`(404 COMMON_002) · `BatchProcessException`(500 BATCH_001, Step 안에서 던진다)
+   - 검출: `ErrorCodeContractTest`(모든 코드의 status 400~599·코드 유일) · `GlobalExceptionHandlerTest`(unit, 단일 핸들러와 전용 핸들러 선택)
    - Listener에서 에러 로깅 자동 처리
 
 6. **String Enum Pattern**

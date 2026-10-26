@@ -10,6 +10,4 @@ import com.rex.batch.skeleton.enums.ErrorCode
  */
 class ForbiddenException(
     message: String = "Operation not permitted for this API key",
-) : RuntimeException(message) {
-    val errorCode: ErrorCode = ErrorCode.FORBIDDEN
-}
+) : CodedException(ErrorCode.FORBIDDEN, message)

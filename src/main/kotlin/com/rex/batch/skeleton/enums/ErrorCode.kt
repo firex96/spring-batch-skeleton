@@ -22,7 +22,11 @@ enum class ErrorCode(
     JOB_ALREADY_RUNNING(HttpStatus.CONFLICT, "JOB_003", "Job is already running"),
     JOB_LAUNCH_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "JOB_004", "Failed to launch job"),
 
+    // 배치 처리
+    BATCH_PROCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "BATCH_001", "Batch process failed"),
+
     // 일반
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "COMMON_001", "Invalid request"),
+    ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_002", "Item not found"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON_999", "Internal server error"),
 }
